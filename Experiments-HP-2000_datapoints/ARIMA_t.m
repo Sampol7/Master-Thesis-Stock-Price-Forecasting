@@ -1,0 +1,213 @@
+clear;
+
+
+%% Add path
+scriptDir = fileparts(mfilename('fullpath'));
+functionsDir = fullfile(scriptDir, '..', 'Functions');
+addpath(genpath(functionsDir));
+
+
+%% Data
+rng(2); 
+
+close = csvread("close.csv");
+split_idx = size(close,1)-100;
+
+train_close = close(1:split_idx, :);
+test_close = close(split_idx+1:end, :);
+
+logclose = log(close);
+train_logclose = logclose(1:split_idx, :);
+test_logclose = logclose(split_idx+1:end, :);
+
+logreturns = diff(logclose);
+train_logreturns = logreturns(1:split_idx-1, :);
+test_logreturns = logreturns(split_idx:end, :);
+
+
+%% Fit ARIMA-t for various p,q
+max_pq = 5;
+results_ARIMAt_p1q = ARIMAt_p1q(train_logclose, max_pq);
+
+%% Find best ARIMA-t from all fits, based on aic, p-value, and correlation
+best_pqA = find_best_ARIMAt(train_logclose,results_ARIMAt_p1q);
+
+
+%% Fit best ARIMA-t
+p_best = best_pqA(1);
+q_best = best_pqA(2);
+pvalue_best = best_pqA(3);
+aic_best = best_pqA(4);
+disp(['Best ARIMA-t model: ARIMA-t(', num2str(p_best), ',1,', num2str(q_best), ')']);
+disp("Best Pvalue:")
+disp(num2str(pvalue_best, '%.8f'));
+disp("Best AIC:")
+disp(aic_best)
+
+modelARIMA = arima(p_best, 1, q_best);
+modelARIMA.Distribution = 't';
+fitARIMA = estimate(modelARIMA, train_logclose);
+
+[res_arima, var_arima] = infer(fitARIMA, train_logclose);
+stan_res_arima = res_arima ./ sqrt(var_arima);
+
+train_MSE = sum(res_arima.^2)/size(res_arima,1);
+disp(['Training MSE: ' num2str(train_MSE)]);
+
+csvwrite('rawResiduals_ARIMA_t.csv', res_arima);
+csvwrite('stanResiduals_ARIMA_t.csv', stan_res_arima);
+
+
+
+%% Pspectrum residuals
+
+[pxx2, f2] = pspectrum(res_arima);
+geometric_mean2 = exp(mean(log(pxx2)));
+arithmetic_mean2 = mean(pxx2);
+flatness2 = geometric_mean2 / arithmetic_mean2;
+disp(['Flatness raw residuals:', num2str(flatness2)]);
+
+
+[pxx3, f3] = pspectrum(stan_res_arima);
+geometric_mean3 = exp(mean(log(pxx3)));
+arithmetic_mean3 = mean(pxx3);
+flatness3 = geometric_mean3 / arithmetic_mean3;
+disp(['Flatness satandardized residuals:', num2str(flatness3)]);
+
+
+%% Predictions Training Set
+train_logclose_pred = train_logclose - res_arima;
+
+figure;
+plot(train_logclose, 'b', 'DisplayName', 'Real Logclose');
+hold on;
+plot(train_logclose_pred, 'r', 'DisplayName', 'In-sample Logclose Predictions');
+xlabel('Date');
+ylabel('Logclose');
+legend('Location', 'best');
+hold off;
+
+%% Verify correlation residuals
+num_lags = ceil(log(length(stan_res_arima))); 
+
+figure;
+subplot(2, 1, 1);
+autocorr(stan_res_arima, 'NumLags', num_lags);
+ylim([-1,1]);
+title('');
+
+subplot(2, 1, 2);
+parcorr(stan_res_arima, 'NumLags', num_lags);
+ylim([-1,1]);
+title('');
+
+%null hypothesis of no residual autocorrelation
+[h_lbq,pValue_lbq,stat_lbq,cValue_lbq] = lbqtest(res_arima, Lags=num_lags);
+disp(['LBQ p-value raw residuals: ', num2str(pValue_lbq)]);
+
+%null hypothesis of no residual autocorrelation
+[h_lbq,pValue_lbq,stat_lbq,cValue_lbq] = lbqtest(stan_res_arima, Lags=num_lags);
+disp(['LBQ p-value standardized residuals: ', num2str(pValue_lbq)]);
+
+
+%% Verify distribution residuals
+mu = mean(res_arima);
+sigma = std(res_arima);
+x = linspace(min(res_arima), max(res_arima), 1000);
+normal_pdf = normpdf(x, mu, sigma);
+
+figure;
+qqplot(res_arima, makedist('Normal', 'mu', mu, 'sigma', sigma));
+xlabel('Theoretical Quantiles (Normal)');
+ylabel('Sample Quantiles');
+title('');
+
+fitted_t = fitdist(res_arima, 'tlocationscale');
+mu_t = fitted_t.mu;        
+sigma_t = fitted_t.sigma;     
+nu_t = fitted_t.nu;
+
+figure;
+qqplot(res_arima, makedist('tLocationScale', 'mu', mu_t, 'sigma', sigma_t, 'nu', nu_t));
+xlabel('Theoretical Quantiles (Student''s t)');
+ylabel('Sample Quantiles');
+title('');
+
+
+%% Verify variance residuals
+
+stan_res_arima_variance = movvar(stan_res_arima, 100);
+figure;
+plot(stan_res_arima_variance);
+xlabel('Date');
+ylabel('Variance');
+
+% null hypothesis of no conditional heteroscedasticity
+[h_arch, pValue_arch] = archtest(res_arima, Lags=5);
+disp('ARCH test p-value raw Residuals: ');
+disp(pValue_arch);
+
+% null hypothesis of no conditional heteroscedasticity
+[h_arch, pValue_arch] = archtest(stan_res_arima, Lags=5);
+disp('ARCH test p-value standardized Residuals: ');
+disp(pValue_arch);
+
+
+%% Forecast logclose best arima
+forecasted_logclose_ARIMA = zeros(length(test_logclose),1);
+for i=1:length(test_logclose)
+    forecasted_logclose_ARIMA(i) = forecast(fitARIMA, 1, logclose(i:length(train_logclose)+i-1));
+end
+
+csvwrite('forecasted_logclose_ARIMA_t.csv', forecasted_logclose_ARIMA);
+
+
+figure;
+plot(test_logclose, 'b', 'DisplayName', 'Real Log Close');
+hold on;
+plot(forecasted_logclose_ARIMA, 'r', 'DisplayName', 'Out-of-Sample Log Close Predictions');
+xlabel('Date');
+ylabel('Log Close');
+legend('Location', 'best');
+hold off;
+
+error_metrics_arima_logclose = computeErrorMetrics(test_logclose, forecasted_logclose_ARIMA);
+disp('Best ARIMA-t Forecast Log Close Error Metrics:');
+disp(error_metrics_arima_logclose);
+
+disp('Best ARIMA-t Forecast Log Close Directional Metrics:');
+directional_metrics_arima_logclose = computeDirectionalMetrics(test_logclose, forecasted_logclose_ARIMA);
+disp(directional_metrics_arima_logclose);
+
+
+
+%% From logclose forecasts to close forecasts
+forecasted_close_ARIMA = exp(forecasted_logclose_ARIMA);
+csvwrite('forecasted_close_ARIMA_t.csv', forecasted_close_ARIMA);
+
+
+%% Evaluate forecast close best arima
+
+figure;
+plot(test_close, 'b', 'DisplayName', 'Real  Close');
+hold on;
+plot(forecasted_close_ARIMA, 'r', 'DisplayName', 'Forecasted  Close');
+xlabel('Date');
+ylabel('Close');
+legend;
+hold off;
+
+error_metrics_arima_close = computeErrorMetrics(test_close, forecasted_close_ARIMA);
+disp('Best ARIMA-t Forecast Close Error Metrics:');
+disp(error_metrics_arima_close);
+
+disp('Best ARIMA-t Forecast Close Directional Metrics:');
+directional_metrics_arima_close = computeDirectionalMetrics(test_close, forecasted_close_ARIMA);
+disp(directional_metrics_arima_close);
+
+
+
+
+
+
+
