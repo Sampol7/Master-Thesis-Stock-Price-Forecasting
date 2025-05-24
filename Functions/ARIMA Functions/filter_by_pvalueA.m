@@ -1,0 +1,5 @@
+%Function to remove all fits for which maximal p-value is larger than tolerance
+
+function filtered_results = filter_by_pvalueA(results, tolerance)
+    filtered_results = results(results(:, 3) < tolerance, :);
+end
