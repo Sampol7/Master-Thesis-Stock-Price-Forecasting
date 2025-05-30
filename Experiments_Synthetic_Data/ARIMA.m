@@ -33,10 +33,8 @@ q = results_ARIMA_p1q(:,2);
 pval = results_ARIMA_p1q(:,3);
 aic = results_ARIMA_p1q(:,4);
 
-[p_grid, q_grid] = meshgrid(0:5, 0:5);
-
-pval_grid = nan(size(p_grid));
-aic_grid = nan(size(p_grid));
+pval_grid = nan(max_pq);
+aic_grid = nan(max_pq);
 
 for i = 1:length(p)
     row = q(i) + 1; 
@@ -47,7 +45,7 @@ end
 
 
 figure;
-imagesc(0:5, 0:5, aic_grid);
+imagesc(0:max_pq, 0:max_pq, aic_grid);
 set(gca, 'YDir', 'normal');
 colorbar;
 xlabel('p');
@@ -55,7 +53,7 @@ ylabel('q');
 add_red_boxes(p, q, pval); 
 
 figure;
-imagesc(0:5, 0:5, pval_grid);
+imagesc(0:max_pq, 0:max_pq, pval_grid);
 set(gca, 'YDir', 'normal');
 colorbar;
 xlabel('p');
