@@ -71,7 +71,7 @@ This section outlines the structure of the `Experiments Synthetic Data/` directo
 - Run `ML_residual_analysis.m` and part of `NonlinearityTests.R` to analyze the residuals of ARIMA-t-FNN.
 
 ## Documentation
-The code is documented with comments that explain the purpose of each file or section. For the Python code, documentation is only provided in the `Experiments Synthetic Data/` directory. The Python scripts in the directories `Experiments - HP - 1000 datapoints/`, `Experiments - HP - 2000 datapoints/`, `Experiments - HP - 4000 datapoints/`, and `Experiments - HP - 8000 datapoints/` are not separately documented, as they replicate the experiments from `Experiments Synthetic Data/` using different dataset sets.
+The code is documented with comments that explain the purpose of each file or section. For the Python code, documentation is only provided in the `Experiments_Synthetic_Data\FNN_hyperopt_BO-TPE_robustscaler.ipynb` and `Experiments_Synthetic_Data\ARIMA_t_FNN_hyperopt_BO-TPE_robustscaler.ipynb` files. The other Python scripts are not separately documented, as they replicate the experiments from `Experiments_Synthetic_Data\FNN_hyperopt_BO-TPE_robustscaler.ipynb` and `Experiments_Synthetic_Data\ARIMA_t_FNN_hyperopt_BO-TPE_robustscaler.ipynb` with different models or datasets.
 
 ## Citation
 
