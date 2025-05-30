@@ -222,6 +222,7 @@ plot(CI_lower_close, 'g--', 'DisplayName', '95% CI Lower');
 plot(CI_upper_close, 'g--', 'DisplayName', '95% CI Upper');
 xlabel('Date');
 ylabel('Close');
+ylim([20,29]);
 text(10, 21, sprintf('PICP: %.2f%%', PICP_close), 'FontSize', 10, 'Color', 'k');
 text(10, 20.6, sprintf('PINAW: %.2f', PINAW_close), 'FontSize', 10, 'Color', 'k');
 legend;
